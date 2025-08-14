@@ -14,7 +14,7 @@
 
 use {
     crate::ConfigFilter,
-    solana_program::pubkey::Pubkey,
+    solana_pubkey::Pubkey,
     std::{collections::HashSet, str::FromStr},
 };
 
