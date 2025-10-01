@@ -23,7 +23,7 @@ use {
     },
     agave_geyser_plugin_interface::geyser_plugin_interface::{
         GeyserPlugin, GeyserPluginError as PluginError, ReplicaAccountInfoV3,
-        ReplicaAccountInfoVersions, ReplicaTransactionInfoV2, ReplicaTransactionInfoVersions,
+        ReplicaAccountInfoVersions, ReplicaTransactionInfoV3, ReplicaTransactionInfoVersions,
         Result as PluginResult, SlotStatus as PluginSlotStatus,
     },
     log::{debug, error, info, log_enabled},
@@ -187,8 +187,8 @@ impl GeyserPlugin for KafkaPlugin {
 
                 if !info
                     .transaction
-                    .message()
-                    .account_keys()
+                    .message
+                    .static_account_keys()
                     .iter()
                     .any(|pubkey| {
                         filter.wants_program(pubkey.as_ref())
@@ -251,12 +251,15 @@ impl KafkaPlugin {
 
     fn unwrap_transaction(
         transaction: ReplicaTransactionInfoVersions,
-    ) -> &ReplicaTransactionInfoV2 {
+    ) -> &ReplicaTransactionInfoV3 {
         match transaction {
             ReplicaTransactionInfoVersions::V0_0_1(_info) => {
                 panic!("ReplicaTransactionInfoVersions::V0_0_1 unsupported, please upgrade your Solana node.");
             }
-            ReplicaTransactionInfoVersions::V0_0_2(info) => info,
+            ReplicaTransactionInfoVersions::V0_0_2(_info) => {
+                panic!("ReplicaTransactionInfoVersions::V0_0_2 unsupported, please upgrade your Solana node.");
+            }
+            ReplicaTransactionInfoVersions::V0_0_3(info) => info,
         }
     }
 
@@ -307,13 +310,14 @@ impl KafkaPlugin {
 
     fn build_transaction_event(
         slot: u64,
-        ReplicaTransactionInfoV2 {
+        ReplicaTransactionInfoV3 {
             signature,
             is_vote,
             transaction,
             transaction_status_meta,
             index,
-        }: &ReplicaTransactionInfoV2,
+            message_hash,
+        }: &ReplicaTransactionInfoV3,
     ) -> TransactionEvent {
         TransactionEvent {
             is_vote: *is_vote,
@@ -385,54 +389,49 @@ impl KafkaPlugin {
                 },
             }),
             transaction: Some(SanitizedTransaction {
-                message_hash: transaction.message_hash().to_bytes().into(),
-                is_simple_vote_transaction: transaction.is_simple_vote_transaction(),
+                message_hash: message_hash.to_bytes().into(),
+                is_simple_vote_transaction: *is_vote,
                 message: Some(SanitizedMessage {
-                    message_payload: Some(match transaction.message() {
-                        solana_message::SanitizedMessage::Legacy(lv) => {
+                    message_payload: Some(match &transaction.message {
+                        solana_message::VersionedMessage::Legacy(lv) => {
                             sanitized_message::MessagePayload::Legacy(LegacyLoadedMessage {
                                 message: Some(LegacyMessage {
-                                    header: Some(Self::build_message_header(&lv.message.header)),
+                                    header: Some(Self::build_message_header(&lv.header)),
                                     account_keys: lv
-                                        .message
                                         .account_keys
                                         .clone()
                                         .into_iter()
                                         .map(|k| k.as_ref().into())
                                         .collect(),
                                     instructions: lv
-                                        .message
                                         .instructions
                                         .iter()
                                         .map(Self::build_compiled_instruction)
                                         .collect(),
-                                    recent_block_hash: lv.message.recent_blockhash.as_ref().into(),
+                                    recent_block_hash: lv.recent_blockhash.as_ref().into(),
                                 }),
-                                is_writable_account_cache: (0..(lv.account_keys().len() - 1))
-                                    .map(|i: usize| lv.is_writable(i))
+                                is_writable_account_cache: (0..(lv.account_keys.len() - 1))
+                                    .map(|i: usize| lv.is_maybe_writable(i, None))
                                     .collect(),
                             })
                         }
-                        solana_message::SanitizedMessage::V0(v0) => {
+                        solana_message::VersionedMessage::V0(v0) => {
                             sanitized_message::MessagePayload::V0(V0LoadedMessage {
                                 message: Some(V0Message {
-                                    header: Some(Self::build_message_header(&v0.message.header)),
+                                    header: Some(Self::build_message_header(&v0.header)),
                                     account_keys: v0
-                                        .message
                                         .account_keys
                                         .clone()
                                         .into_iter()
                                         .map(|k| k.as_ref().into())
                                         .collect(),
-                                    recent_block_hash: v0.message.recent_blockhash.as_ref().into(),
+                                    recent_block_hash: v0.recent_blockhash.as_ref().into(),
                                     instructions: v0
-                                        .message
                                         .instructions
                                         .iter()
                                         .map(Self::build_compiled_instruction)
                                         .collect(),
                                     address_table_lookup: v0
-                                        .message
                                         .address_table_lookups
                                         .clone()
                                         .into_iter()
@@ -452,14 +451,14 @@ impl KafkaPlugin {
                                         .collect(),
                                 }),
                                 loaded_adresses: Some(LoadedAddresses {
-                                    writable: v0
+                                    writable: transaction_status_meta
                                         .loaded_addresses
                                         .writable
                                         .clone()
                                         .into_iter()
                                         .map(|x| x.as_ref().into())
                                         .collect(),
-                                    readonly: v0
+                                    readonly: transaction_status_meta
                                         .loaded_addresses
                                         .readonly
                                         .clone()
@@ -467,15 +466,15 @@ impl KafkaPlugin {
                                         .map(|x| x.as_ref().into())
                                         .collect(),
                                 }),
-                                is_writable_account_cache: (0..(v0.account_keys().len() - 1))
-                                    .map(|i: usize| v0.is_writable(i))
+                                is_writable_account_cache: (0..(v0.account_keys.len() - 1))
+                                    .map(|i: usize| v0.is_maybe_writable(i, None))
                                     .collect(),
                             })
                         }
                     }),
                 }),
                 signatures: transaction
-                    .signatures()
+                    .signatures
                     .iter()
                     .copied()
                     .map(|x| x.as_ref().into())

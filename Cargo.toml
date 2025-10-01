@@ -1,8 +1,8 @@
 [package]
 name = "solana-accountsdb-plugin-kafka"
 description = "Solana AccountsDb plugin for Kafka"
-authors = ["Blockdaemon", "Triton One"]
-version = "0.4.0+solana.2.2.12"
+authors = ["Blockdaemon", "Triton One", "Shyft"]
+version = "0.5.0+solana.2.3"
 edition = "2021"
 repository = "https://github.com/rpcpool/solana-accountsdb-plugin-kafka"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-agave-geyser-plugin-interface = "~2.3.0"
+agave-geyser-plugin-interface = "3.0.0"
 hyper = { version = "0.14.26", features = ["http1", "server", "tcp"] }
 lazy_static = "1.4.0"
 log = "0.4.0"
@@ -21,24 +21,23 @@ prost = "0.12.1"
 rdkafka = { version = "0.33.0", features = ["ssl", "sasl"] }
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.81"
-solana-logger = "~2.3.0"
-solana-pubkey = "~2.4.0"
-solana-transaction = "~2.2.1"
-solana-transaction-status = "~2.3.0"
+solana-account = "3"
+solana-account-decoder = "3"
+solana-clock = "3"
+solana-hash = "3"
+solana-keypair = "3"
+solana-logger = "3"
+solana-message = "3"
+solana-pubkey = "3"
+solana-signature = "3"
+solana-signer = "3"
+solana-storage-proto = "3"
+solana-transaction = "3"
+solana-transaction-context = "3"
+solana-transaction-error = "3"
+solana-transaction-status = "3"
+spl-token-2022 = "8"
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "time", "macros", "sync"] }
-
-solana-account = "~2.2.1"
-solana-account-decoder = "~2.3.0"
-solana-clock = "~2.2.1"
-solana-hash = "~2.3.0"
-solana-keypair = "~2.2.1"
-solana-message = "~2.4.0"
-solana-signature = "~2.3.0"
-solana-signer = "~2.2.1"
-solana-storage-proto = "~2.3.0"
-solana-transaction-context = "~2.3.0"
-solana-transaction-error = "~2.2.1"
-spl-token-2022 = "8.0.0"
 
 [build-dependencies]
 anyhow = "1.0.65"
