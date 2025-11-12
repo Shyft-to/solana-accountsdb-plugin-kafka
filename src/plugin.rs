@@ -190,6 +190,8 @@ impl GeyserPlugin for KafkaPlugin {
                     .message
                     .static_account_keys()
                     .iter()
+                    .chain(info.transaction_status_meta.loaded_addresses.writable.iter())
+                    .chain(info.transaction_status_meta.loaded_addresses.readonly.iter())
                     .any(|pubkey| {
                         filter.wants_program(pubkey.as_ref())
                             || filter.wants_account(pubkey.as_ref())
