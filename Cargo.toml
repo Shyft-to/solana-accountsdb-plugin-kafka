@@ -2,7 +2,7 @@
 name = "solana-accountsdb-plugin-kafka"
 description = "Solana AccountsDb plugin for Kafka"
 authors = ["Blockdaemon", "Triton One", "Shyft"]
-version = "0.6.0+solana.3.0"
+version = "0.6.0+solana.3.1"
 edition = "2021"
 repository = "https://github.com/Shyft-to/solana-accountsdb-plugin-kafka"
 license = "Apache-2.0"
@@ -12,39 +12,30 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-agave-geyser-plugin-interface = "3.0.10"
-hyper = { version = "0.14.26", features = ["http1", "server", "tcp"] }
+agave-geyser-plugin-interface = "=3.1.8"
+http = "1.4.0"
+http-body-util = { version = "0.1.3", features = ["full"] }
+hyper = { version = "1.4.1", features = ["http1", "server"] }
+hyper-util = { version = "0.1.20", features = ["server", "server-auto", "tokio"] }
 lazy_static = "1.4.0"
 log = "0.4.0"
-prometheus = "0.13.3"
-prost = "0.12.1"
+prometheus = "0.14.0"
+prost = "0.14.0"
 rdkafka = { version = "0.33.0", features = ["ssl", "sasl"] }
 serde = { version = "1.0.147", features = ["derive"] }
-serde_json = "1.0.81"
-solana-account = "3"
-solana-account-decoder = "3"
-solana-clock = "3"
-solana-hash = "3"
-solana-keypair = "3"
-solana-logger = "3"
-solana-message = "3"
-solana-pubkey = "3"
-solana-signature = "3"
-solana-signer = "3"
-solana-storage-proto = "3"
-solana-transaction = "3"
-solana-transaction-context = "3"
-solana-transaction-error = "3"
-solana-transaction-status = "3"
-spl-token-2022 = "8"
-tokio = { version = "1.32.0", features = ["rt-multi-thread", "time", "macros", "sync"] }
+serde_json = "1.0.86"
+solana-logger = "=3.0.0"
+solana-message = "=3.1.0"
+solana-pubkey = "=4.0.0"
+solana-transaction-status = "=3.1.8"
+tokio = { version = "1.47.0", features = ["rt-multi-thread", "time", "macros", "net", "sync"] }
 
 [build-dependencies]
-anyhow = "1.0.65"
-cargo-lock = "10.0.1"
+anyhow = "1.0.98"
+cargo-lock = "11.0.0"
 git-version = "0.3.5"
 prost-build = "0.12.1"
-vergen = { version = "9.0.1", features = ["build", "rustc"] }
+vergen = { version = "=9.0.6", features = ["build", "rustc" ] }
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

@@ -1,10 +1,8 @@
 use {
     crate::version::VERSION as VERSION_INFO,
-    hyper::{
-        server::conn::AddrStream,
-        service::{make_service_fn, service_fn},
-        Body, Request, Response, Server, StatusCode,
-    },
+    http_body_util::{combinators::BoxBody, BodyExt, Empty, Full},
+    hyper::{body::Bytes, server::conn::http1, service::service_fn, Request, Response, StatusCode},
+    hyper_util::rt::TokioIo,
     log::*,
     prometheus::{GaugeVec, IntCounterVec, Opts, Registry, TextEncoder},
     rdkafka::{
@@ -13,7 +11,8 @@ use {
         statistics::Statistics,
     },
     std::{
-        io::Result as IoResult,
+        convert::Infallible,
+        io,
         net::SocketAddr,
         sync::{
             atomic::{AtomicUsize, Ordering},
@@ -21,7 +20,10 @@ use {
         },
         time::Duration,
     },
-    tokio::runtime::{Builder, Runtime},
+    tokio::{
+        net::TcpListener,
+        runtime::{Builder, Runtime},
+    },
 };
 
 lazy_static::lazy_static! {
@@ -59,7 +61,7 @@ pub struct PrometheusService {
 }
 
 impl PrometheusService {
-    pub fn new(address: SocketAddr) -> IoResult<Self> {
+    pub fn new(address: SocketAddr) -> io::Result<Self> {
         static REGISTER: Once = Once::new();
         REGISTER.call_once(|| {
             macro_rules! register {
@@ -94,20 +96,35 @@ impl PrometheusService {
             })
             .enable_all()
             .build()?;
-        runtime.spawn(async move {
-            let make_service = make_service_fn(move |_: &AddrStream| async move {
-                Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| async move {
-                    let response = match req.uri().path() {
-                        "/metrics" => metrics_handler(),
-                        _ => not_found_handler(),
-                    };
-                    Ok::<_, hyper::Error>(response)
-                }))
+        runtime.block_on(async move {
+            let service = service_fn(async move |req: Request<_>| match req.uri().path() {
+                "/metrics" => metrics_handler(),
+                _ => not_found_handler(),
             });
-            if let Err(error) = Server::bind(&address).serve(make_service).await {
-                error!("prometheus service failed: {}", error);
-            }
-        });
+            let listener = TcpListener::bind(&address).await?;
+            info!("Prometheus started on {address}");
+            tokio::task::spawn(async move {
+                loop {
+                    let stream = match listener.accept().await {
+                        Ok((s, _)) => s,
+                        Err(e) => {
+                            error!("failed to accept new connection: {e}");
+                            break;
+                        }
+                    };
+                    let io = TokioIo::new(stream);
+
+                    tokio::task::spawn(async move {
+                        if let Err(error) =
+                            http1::Builder::new().serve_connection(io, service).await
+                        {
+                            error!("prometheus service failed: {}", error);
+                        }
+                    });
+                }
+            });
+            Ok::<(), io::Error>(())
+        })?;
         Ok(PrometheusService { runtime })
     }
 
@@ -116,21 +133,22 @@ impl PrometheusService {
     }
 }
 
-fn metrics_handler() -> Response<Body> {
+fn metrics_handler() -> http::Result<Response<BoxBody<Bytes, Infallible>>> {
     let metrics = TextEncoder::new()
         .encode_to_string(&REGISTRY.gather())
         .unwrap_or_else(|error| {
             error!("could not encode custom metrics: {}", error);
             String::new()
         });
-    Response::builder().body(Body::from(metrics)).unwrap()
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Full::new(Bytes::from(metrics)).boxed())
 }
 
-fn not_found_handler() -> Response<Body> {
+fn not_found_handler() -> http::Result<Response<BoxBody<Bytes, Infallible>>> {
     Response::builder()
         .status(StatusCode::NOT_FOUND)
-        .body(Body::empty())
-        .unwrap()
+        .body(Empty::new().boxed())
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -142,7 +160,7 @@ impl ClientContext for StatsThreadedProducerContext {
             macro_rules! set_value {
                 ($name:expr, $value:expr) => {
                     KAFKA_STATS
-                        .with_label_values(&[&name, $name])
+                        .with_label_values(&[name.as_str(), $name])
                         .set($value as f64);
                 };
             }
