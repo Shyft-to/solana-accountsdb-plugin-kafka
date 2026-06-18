@@ -14,12 +14,7 @@
 
 use {
     crate::{
-        sanitized_message, CompiledInstruction, Config, Filter, InnerInstruction,
-        InnerInstructions, LegacyLoadedMessage, LegacyMessage, LoadedAddresses,
-        MessageAddressTableLookup, MessageHeader, PrometheusService, Publisher, Reward,
-        SanitizedMessage, SanitizedTransaction, SlotStatus, SlotStatusEvent, TransactionEvent,
-        TransactionStatusMeta, TransactionTokenBalance, UiTokenAmount, UpdateAccountEvent,
-        V0LoadedMessage, V0Message,
+        CompiledInstruction, Config, Filter, InnerInstruction, InnerInstructions, LegacyLoadedMessage, LegacyMessage, LoadedAddresses, MessageAddressTableLookup, MessageHeader, PrometheusService, Publisher, Reward, SanitizedMessage, SanitizedTransaction, SlotStatus, SlotStatusEvent, TransactionEvent, TransactionStatusMeta, TransactionTokenBalance, UiTokenAmount, UpdateAccountEvent, V0LoadedMessage, V0Message, sanitized_message
     },
     agave_geyser_plugin_interface::geyser_plugin_interface::{
         GeyserPlugin, GeyserPluginError as PluginError, ReplicaAccountInfoV3,
@@ -29,6 +24,7 @@ use {
     log::{debug, error, info, log_enabled},
     rdkafka::util::get_rdkafka_version,
     solana_pubkey::Pubkey,
+    solana_transaction::{self, versioned::TransactionVersion},
     std::{
         concat, env,
         fmt::{Debug, Formatter},
@@ -206,8 +202,9 @@ impl GeyserPlugin for KafkaPlugin {
                         filter.wants_program(pubkey.as_ref())
                             || filter.wants_account(pubkey.as_ref())
                     })
+                 || info.transaction.version() == TransactionVersion::Number(1)
                 {
-                    debug!("Ignoring transaction {:?}", info.signature);
+                    debug!("Ignoring transaction {:?}, version: {:?}", info.signature, info.transaction.version());
                     continue;
                 }
 
@@ -249,7 +246,7 @@ impl KafkaPlugin {
         self.filter.as_ref().expect("filter is unavailable")
     }
 
-    fn unwrap_update_account(account: ReplicaAccountInfoVersions) -> &ReplicaAccountInfoV3 {
+    fn unwrap_update_account(account: ReplicaAccountInfoVersions<'_>) -> &ReplicaAccountInfoV3<'_> {
         match account {
             ReplicaAccountInfoVersions::V0_0_1(_info) => {
                 panic!("ReplicaAccountInfoVersions::V0_0_1 unsupported, please upgrade your Solana node.");
@@ -262,8 +259,8 @@ impl KafkaPlugin {
     }
 
     fn unwrap_transaction(
-        transaction: ReplicaTransactionInfoVersions,
-    ) -> &ReplicaTransactionInfoV3 {
+        transaction: ReplicaTransactionInfoVersions<'_>,
+    ) -> &ReplicaTransactionInfoV3<'_>  {
         match transaction {
             ReplicaTransactionInfoVersions::V0_0_1(_info) => {
                 panic!("ReplicaTransactionInfoVersions::V0_0_1 unsupported, please upgrade your Solana node.");
@@ -482,6 +479,9 @@ impl KafkaPlugin {
                                     .map(|i: usize| v0.is_maybe_writable(i, None))
                                     .collect(),
                             })
+                        }
+                        solana_message::VersionedMessage::V1(_) => {
+                            unimplemented!("V1 txn not supported yet");
                         }
                     }),
                 }),
